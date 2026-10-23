@@ -1,0 +1,456 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Philippine HRIS API",
+    "description": "Multi-tenant SaaS HR Information System for Philippine companies. Supports DTR, payroll computation (SSS, PhilHealth, Pag-IBIG, BIR tax), leave management, and HR analytics.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "HRIS Support"
+    }
+  },
+  "servers": [
+    { "url": "http://localhost:3002", "description": "Local Development" }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "pageSize": { "type": "integer" },
+          "total": { "type": "integer" },
+          "totalPages": { "type": "integer" }
+        }
+      },
+      "Employee": {
+        "type": "object",
+        "properties": {
+          "Id": { "type": "string", "format": "uuid" },
+          "EmployeeNo": { "type": "string" },
+          "FirstName": { "type": "string" },
+          "LastName": { "type": "string" },
+          "DepartmentName": { "type": "string" },
+          "PositionTitle": { "type": "string" },
+          "BasicSalary": { "type": "number" },
+          "EmploymentStatus": { "type": "string" },
+          "IsActive": { "type": "boolean" }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["email", "password"],
+        "properties": {
+          "email": { "type": "string", "format": "email" },
+          "password": { "type": "string" }
+        }
+      },
+      "LoginResponse": {
+        "type": "object",
+        "properties": {
+          "accessToken": { "type": "string" },
+          "refreshToken": { "type": "string" },
+          "user": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "email": { "type": "string" },
+              "roles": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      },
+      "PayrollPeriod": {
+        "type": "object",
+        "properties": {
+          "Id": { "type": "string", "format": "uuid" },
+          "PeriodStart": { "type": "string", "format": "date" },
+          "PeriodEnd": { "type": "string", "format": "date" },
+          "PayDate": { "type": "string", "format": "date" },
+          "PayFrequency": { "type": "string", "enum": ["Monthly", "SemiMonthly", "Weekly", "Daily"] },
+          "Status": { "type": "string", "enum": ["Open", "Processing", "Approved", "Paid"] }
+        }
+      },
+      "LeaveRequest": {
+        "type": "object",
+        "properties": {
+          "Id": { "type": "string", "format": "uuid" },
+          "DateFrom": { "type": "string", "format": "date" },
+          "DateTo": { "type": "string", "format": "date" },
+          "TotalDays": { "type": "number" },
+          "Status": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] },
+          "Reason": { "type": "string" }
+        }
+      },
+      "BiometricIngest": {
+        "type": "object",
+        "required": ["employeeNo", "timestamp"],
+        "properties": {
+          "employeeNo": { "type": "string", "description": "Employee number" },
+          "biometricId": { "type": "string", "description": "Biometric device ID" },
+          "timestamp": { "type": "string", "format": "date-time" },
+          "deviceId": { "type": "string" },
+          "logType": { "type": "string", "enum": ["IN", "OUT"] }
+        }
+      }
+    }
+  },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["System"],
+        "summary": "Health check",
+        "security": [],
+        "responses": {
+          "200": { "description": "Server is running" }
+        }
+      }
+    },
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Login and get access token",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/LoginRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Login successful",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/LoginResponse" } } } } }
+          },
+          "401": { "description": "Invalid credentials" }
+        }
+      }
+    },
+    "/api/v1/employees": {
+      "get": {
+        "tags": ["Employees"],
+        "summary": "List employees (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 100 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "departmentId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "employmentStatus", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated employee list",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "employees": { "type": "array", "items": { "$ref": "#/components/schemas/Employee" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Employees"],
+        "summary": "Create employee",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["employeeNo", "firstName", "lastName", "dateHired", "departmentId", "positionId", "basicSalary"], "properties": { "employeeNo": { "type": "string" }, "firstName": { "type": "string" }, "lastName": { "type": "string" }, "departmentId": { "type": "string", "format": "uuid" }, "positionId": { "type": "string", "format": "uuid" }, "basicSalary": { "type": "number" }, "payFrequency": { "type": "string", "default": "Monthly" } } } } }
+        },
+        "responses": {
+          "201": { "description": "Employee created" },
+          "409": { "description": "Duplicate employee number" }
+        }
+      }
+    },
+    "/api/v1/employees/{id}": {
+      "get": {
+        "tags": ["Employees"],
+        "summary": "Get employee by ID",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Employee details" }, "404": { "description": "Not found" } }
+      },
+      "put": {
+        "tags": ["Employees"],
+        "summary": "Update employee",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Employee updated" }, "404": { "description": "Not found" } }
+      },
+      "delete": {
+        "tags": ["Employees"],
+        "summary": "Soft-delete employee",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "responses": { "200": { "description": "Employee deleted" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/api/v1/attendance/today": {
+      "get": {
+        "tags": ["Attendance"],
+        "summary": "Get today's DTR for current user",
+        "responses": { "200": { "description": "Today's DTR" } }
+      }
+    },
+    "/api/v1/attendance/clock-in": {
+      "post": {
+        "tags": ["Attendance"],
+        "summary": "Clock in",
+        "requestBody": {
+          "content": { "application/json": { "schema": { "type": "object", "properties": { "latitude": { "type": "number" }, "longitude": { "type": "number" }, "selfieUrl": { "type": "string" }, "deviceId": { "type": "string" } } } } }
+        },
+        "responses": { "200": { "description": "Clock in recorded" } }
+      }
+    },
+    "/api/v1/attendance/clock-out": {
+      "post": {
+        "tags": ["Attendance"],
+        "summary": "Clock out",
+        "responses": { "200": { "description": "Clock out recorded" } }
+      }
+    },
+    "/api/v1/attendance/logs": {
+      "get": {
+        "tags": ["Attendance"],
+        "summary": "Get attendance logs (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date-time" } },
+          { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date-time" } }
+        ],
+        "responses": { "200": { "description": "Paginated attendance logs" } }
+      }
+    },
+    "/api/v1/attendance/biometric-ingest": {
+      "post": {
+        "tags": ["Attendance"],
+        "summary": "Biometric device webhook (no auth required)",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/BiometricIngest" } } }
+        },
+        "responses": {
+          "201": { "description": "Biometric attendance recorded" },
+          "404": { "description": "Employee not found" }
+        }
+      }
+    },
+    "/api/v1/leave/types": {
+      "get": {
+        "tags": ["Leave"],
+        "summary": "Get leave types",
+        "responses": { "200": { "description": "List of leave types" } }
+      }
+    },
+    "/api/v1/leave/credits": {
+      "get": {
+        "tags": ["Leave"],
+        "summary": "Get leave credits (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "year", "in": "query", "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": { "description": "Paginated leave credits" } }
+      }
+    },
+    "/api/v1/leave/request": {
+      "post": {
+        "tags": ["Leave"],
+        "summary": "Submit leave request",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["leaveTypeId", "dateFrom", "dateTo", "reason"], "properties": { "leaveTypeId": { "type": "string", "format": "uuid" }, "dateFrom": { "type": "string", "format": "date" }, "dateTo": { "type": "string", "format": "date" }, "isHalfDay": { "type": "boolean" }, "reason": { "type": "string" } } } } }
+        },
+        "responses": { "201": { "description": "Leave request submitted" } }
+      }
+    },
+    "/api/v1/leave/requests": {
+      "get": {
+        "tags": ["Leave"],
+        "summary": "Get leave requests (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["Pending", "Approved", "Rejected"] } }
+        ],
+        "responses": { "200": { "description": "Paginated leave requests" } }
+      }
+    },
+    "/api/v1/leave/request/{id}/approve": {
+      "put": {
+        "tags": ["Leave"],
+        "summary": "Approve leave request",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "comment": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Leave approved" } }
+      }
+    },
+    "/api/v1/leave/request/{id}/reject": {
+      "put": {
+        "tags": ["Leave"],
+        "summary": "Reject leave request",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "comment": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Leave rejected" } }
+      }
+    },
+    "/api/v1/leave/accrual": {
+      "post": {
+        "tags": ["Leave"],
+        "summary": "Run monthly leave accrual for all employees",
+        "responses": { "200": { "description": "Accrual completed" } }
+      }
+    },
+    "/api/v1/payroll/periods": {
+      "get": {
+        "tags": ["Payroll"],
+        "summary": "Get payroll periods (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "status", "in": "query", "schema": { "type": "string", "enum": ["Open", "Processing", "Approved", "Paid"] } }
+        ],
+        "responses": { "200": { "description": "Paginated payroll periods" } }
+      }
+    },
+    "/api/v1/payroll/period": {
+      "post": {
+        "tags": ["Payroll"],
+        "summary": "Create payroll period",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["periodStart", "periodEnd", "payDate", "payFrequency"], "properties": { "periodStart": { "type": "string", "format": "date" }, "periodEnd": { "type": "string", "format": "date" }, "payDate": { "type": "string", "format": "date" }, "payFrequency": { "type": "string", "enum": ["Monthly", "SemiMonthly"] } } } } }
+        },
+        "responses": { "201": { "description": "Period created" } }
+      }
+    },
+    "/api/v1/payroll/run": {
+      "post": {
+        "tags": ["Payroll"],
+        "summary": "Run payroll for a period (uses PayrollEngine with GovContributionTables)",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "type": "object", "required": ["payrollPeriodId"], "properties": { "payrollPeriodId": { "type": "string", "format": "uuid" } } } } }
+        },
+        "responses": { "201": { "description": "Payroll run completed with payslips" } }
+      }
+    },
+    "/api/v1/payroll/runs": {
+      "get": {
+        "tags": ["Payroll"],
+        "summary": "Get payroll runs (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": { "200": { "description": "Paginated payroll runs" } }
+      }
+    },
+    "/api/v1/payroll/payslips": {
+      "get": {
+        "tags": ["Payroll"],
+        "summary": "Get payslips (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "payrollRunId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "employeeId", "in": "query", "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": { "200": { "description": "Paginated payslips" } }
+      }
+    },
+    "/api/v1/hr-matrix/dashboard": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "HR analytics dashboard (headcount, pending leaves, attrition)",
+        "responses": { "200": { "description": "Dashboard aggregations" } }
+      }
+    },
+    "/api/v1/hr-matrix/org-chart": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "Organization chart tree",
+        "responses": { "200": { "description": "Org chart tree" } }
+      }
+    },
+    "/api/v1/hr-matrix/headcount": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "Headcount matrix (paginated snapshots + current)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": { "200": { "description": "Headcount data" } }
+      }
+    },
+    "/api/v1/hr-matrix/competency": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "Competency matrix (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "departmentId", "in": "query", "schema": { "type": "string", "format": "uuid" } },
+          { "name": "skillName", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "Competency data" } }
+      }
+    },
+    "/api/v1/hr-matrix/performance": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "Performance reviews (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": { "200": { "description": "Performance review data" } }
+      }
+    },
+    "/api/v1/hr-matrix/disciplinary": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "Disciplinary records (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": { "200": { "description": "Disciplinary records" } }
+      }
+    },
+    "/api/v1/hr-matrix/attrition": {
+      "get": {
+        "tags": ["HR Matrix"],
+        "summary": "Attrition metrics (paginated)",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "pageSize", "in": "query", "schema": { "type": "integer", "default": 20 } }
+        ],
+        "responses": { "200": { "description": "Attrition data" } }
+      }
+    }
+  },
+  "tags": [
+    { "name": "System", "description": "Health and status" },
+    { "name": "Authentication", "description": "Login, logout, refresh tokens" },
+    { "name": "Employees", "description": "Employee CRUD" },
+    { "name": "Attendance", "description": "DTR, clock in/out, biometric webhook" },
+    { "name": "Leave", "description": "Leave types, credits, requests, approval" },
+    { "name": "Payroll", "description": "Payroll periods, runs, payslips" },
+    { "name": "HR Matrix", "description": "Org chart, headcount, competency, performance, disciplinary, attrition" }
+  ]
+}

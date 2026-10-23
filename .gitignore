@@ -1,0 +1,65 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+**/node_modules/
+
+# Environment variables & secrets
+.env
+.env.local
+.env.*.local
+*.env
+cookies.txt
+
+# Database Backups & Large Dumps
+*.bak
+*.dmp
+*.sql.gz
+
+# Build outputs
+dist/
+build/
+frontend/dist/
+**/dist/
+**/build/
+
+# Testing & Reports
+test-results/
+playwright-report/
+frontend/test-results/
+frontend/e2e/reports/
+frontend/e2e/.auth/
+**/.auth/
+coverage/
+**/test-results/
+
+# Graphify cache & snapshot backups (retains graph.json and GRAPH_REPORT.md)
+graphify-out/cache/
+graphify-out/2026-*/
+
+# File uploads & storage
+storage/
+uploads/
+
+# IDE & AI Assistant Local Artifacts
+.vscode/
+.idea/
+.claude/
+.opencode/
+.qodo/
+*.swp
+*.swo
+*.sublime-workspace
+.DS_Store
+Thumbs.db
+nul
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Temporary files
+*.tmp
+*.temp
+.system_generated/
